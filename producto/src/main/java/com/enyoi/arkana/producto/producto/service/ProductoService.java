@@ -3,9 +3,9 @@ import com.enyoi.arkana.producto.producto.model.Producto;
 import com.enyoi.arkana.producto.producto.repository.ProductoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.RequestBody;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import org.springframework.r2dbc.core.DatabaseClient;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,23 +16,45 @@ public class ProductoService {
     @Autowired
     private ProductoRepository productoRepository;
 
-    @Autowired
-    private DatabaseClient databaseClient;
 
-    public Mono<Producto> crearProducto(Producto producto) {
+
+    public Mono<Producto> crearProducto(@RequestBody Producto producto) {
+
+        System.out.println(">>> RECIBIDO EN CONTROLLER: " + producto);
+
+        // VALIDACIÓN
         if (producto.getNombre() == null || producto.getNombre().isBlank()
                 || producto.getMarca() == null || producto.getMarca().isBlank()
                 || producto.getCategoria() == null || producto.getCategoria().isBlank()
                 || producto.getPrecio() == null || producto.getPrecio() <= 0
                 || producto.getStock() == null) {
-            return Mono.error(new IllegalArgumentException("Datos invalidos: ningun campo puede ser nulo o vacio y el precio debe ser mayor que 0."));
+
+            System.out.println("Validacion fallo — stock o algun campo viene NULL");
+            return Mono.error(new IllegalArgumentException(
+                    "Datos invalidos: ningun campo puede ser nulo o vacio y el precio debe ser mayor que 0."
+            ));
         }
 
-        // Verificar si ya existe un producto con el mismo nombre
+        System.out.println(">>> Validacion OK. Verificando si el nombre ya existe...");
+
         return productoRepository.findByNombre(producto.getNombre())
-                .flatMap(existing -> Mono.<Producto>error(new IllegalArgumentException("Ya existe un producto con el mismo nombre.")))
-                .switchIfEmpty(productoRepository.save(producto));
+                .flatMap(existing -> {
+                    return Mono.<Producto>error(
+                            new IllegalArgumentException("Ya existe un producto con el mismo nombre.")
+                    );
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+
+
+                    return productoRepository.save(producto)
+                            .doOnSuccess(p -> System.out.println(">>> GUARDADO: " + p))
+                            .doOnError(e -> {
+                                System.out.println("XXX ERROR AL GUARDAR");
+                                e.printStackTrace();
+                            });
+                }));
     }
+
 
     public Flux<Producto> obtenerTodos() {
 
